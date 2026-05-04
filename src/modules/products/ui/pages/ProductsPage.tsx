@@ -6,6 +6,9 @@ import {
   getFilteredRowModel,
   useReactTable,
 } from '@tanstack/react-table';
+import InventoryOutlinedIcon from '@mui/icons-material/InventoryOutlined';
+import LayersOutlinedIcon from '@mui/icons-material/LayersOutlined';
+import MonetizationOnOutlinedIcon from '@mui/icons-material/MonetizationOnOutlined';
 import { BiaButton, BiaModal, BiaTextField } from '@components/index';
 import { useCreateProduct, useProducts } from '../../hooks/useProducts';
 import {
@@ -26,6 +29,9 @@ const EMPTY_FORM: ProductFormState = {
   category: '',
 };
 
+const SKELETON_COLS = 6;
+const SKELETON_ROWS = 5;
+
 const ProductsPage: React.FC = () => {
   const { data: products = [], isLoading } = useProducts();
   const { mutate: createProduct, isPending: isCreating } = useCreateProduct();
@@ -36,6 +42,14 @@ const ProductsPage: React.FC = () => {
   const [errors, setErrors] = useState<ProductFormErrors>({});
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
+  const stats = useMemo(() => ({
+    total: products.length,
+    totalStock: products.reduce((sum, p) => sum + Number(p.stock), 0),
+    avgPrice: products.length
+      ? products.reduce((sum, p) => sum + Number(p.price), 0) / products.length
+      : 0,
+  }), [products]);
+
   const showToast = (message: string, type: 'success' | 'error') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3500);
@@ -45,17 +59,16 @@ const ProductsPage: React.FC = () => {
     () => [
       columnHelper.accessor('id', {
         header: 'ID',
-        size: 60,
-        cell: info => <span className={styles.cellMuted}>#{info.getValue()}</span>,
+        cell: info => <span className={styles.cellId}>#{info.getValue()}</span>,
       }),
       columnHelper.accessor('name', {
         header: 'Nombre',
-        cell: info => <span className={styles.cellStrong}>{info.getValue()}</span>,
+        cell: info => <span className={styles.cellName}>{info.getValue()}</span>,
       }),
       columnHelper.accessor('description', {
         header: 'Descripción',
         cell: info => (
-          <span className={styles.cellDescription}>{info.getValue() || '—'}</span>
+          <span className={styles.cellDesc}>{info.getValue() || '—'}</span>
         ),
       }),
       columnHelper.accessor('category', {
@@ -65,9 +78,7 @@ const ProductsPage: React.FC = () => {
       columnHelper.accessor('price', {
         header: 'Precio',
         cell: info => (
-          <span className={styles.cellStrong}>
-            ${Number(info.getValue()).toFixed(2)}
-          </span>
+          <span className={styles.cellPrice}>${Number(info.getValue()).toFixed(2)}</span>
         ),
       }),
       columnHelper.accessor('stock', {
@@ -75,13 +86,9 @@ const ProductsPage: React.FC = () => {
         cell: info => {
           const val = Number(info.getValue());
           const variant =
-            val <= 30 ? styles.stockLow : val <= 80 ? styles.stockMedium : styles.stockHigh;
+            val <= 30 ? styles.stockLow : val <= 80 ? styles.stockMid : styles.stockHigh;
           return <span className={`${styles.stockBadge} ${variant}`}>{val}</span>;
         },
-      }),
-      columnHelper.accessor('createdAt', {
-        header: 'Creado',
-        cell: info => <span className={styles.cellMuted}>{info.getValue() || '—'}</span>,
       }),
     ],
     []
@@ -132,7 +139,7 @@ const ProductsPage: React.FC = () => {
       },
       onError: () => {
         handleClose();
-        showToast('No se pudo guardar en el servidor, pero el formulario fue enviado', 'error');
+        showToast('Error al guardar en el servidor', 'error');
       },
     });
   };
@@ -143,7 +150,7 @@ const ProductsPage: React.FC = () => {
     setErrors({});
   };
 
-  const rowCount = table.getRowModel().rows.length;
+  const visibleRows = table.getRowModel().rows;
 
   return (
     <div className={styles.page}>
@@ -153,76 +160,137 @@ const ProductsPage: React.FC = () => {
         </div>
       )}
 
-      <div className={styles.container}>
-        {/* Header */}
-        <div className={styles.header}>
-          <div>
-            <h1 className={styles.title}>Productos</h1>
-            <p className={styles.subtitle}>
-              {isLoading
-                ? 'Cargando...'
-                : `${products.length} producto${products.length !== 1 ? 's' : ''} registrado${products.length !== 1 ? 's' : ''}`}
-            </p>
+      {/* Header */}
+      <header className={styles.header}>
+        <div>
+          <h1 className={styles.title}>Productos</h1>
+          <p className={styles.subtitle}>Dashboard de inventario en tiempo real</p>
+        </div>
+        <button className={styles.newBtn} onClick={() => setIsModalOpen(true)}>
+          <span className={styles.newBtnPlus}>+</span>
+          Nuevo producto
+        </button>
+      </header>
+
+      {/* Stats */}
+      <div className={styles.statsGrid}>
+        <div className={styles.statCard}>
+          <div className={styles.statIcon}>
+            <InventoryOutlinedIcon fontSize="small" />
           </div>
-          <BiaButton onClick={() => setIsModalOpen(true)}>
-            + Nuevo producto
-          </BiaButton>
+          <div className={styles.statBody}>
+            <p className={styles.statLabel}>Total productos</p>
+            {isLoading
+              ? <span className={styles.skeleton} style={{ width: 48, height: 28 }} />
+              : <p className={styles.statValue}>{stats.total}</p>
+            }
+          </div>
         </div>
 
-        {/* Search */}
-        <div className={styles.toolbar}>
-          <BiaTextField
-            placeholder="Buscar por nombre, categoría, descripción..."
+        <div className={styles.statCard}>
+          <div className={styles.statIcon}>
+            <LayersOutlinedIcon fontSize="small" />
+          </div>
+          <div className={styles.statBody}>
+            <p className={styles.statLabel}>Stock total</p>
+            {isLoading
+              ? <span className={styles.skeleton} style={{ width: 64, height: 28 }} />
+              : <p className={styles.statValue}>{stats.totalStock.toLocaleString()}</p>
+            }
+          </div>
+        </div>
+
+        <div className={styles.statCard}>
+          <div className={styles.statIcon}>
+            <MonetizationOnOutlinedIcon fontSize="small" />
+          </div>
+          <div className={styles.statBody}>
+            <p className={styles.statLabel}>Precio promedio</p>
+            {isLoading
+              ? <span className={styles.skeleton} style={{ width: 80, height: 28 }} />
+              : <p className={styles.statValue}>${stats.avgPrice.toFixed(2)}</p>
+            }
+          </div>
+        </div>
+      </div>
+
+      {/* Toolbar */}
+      <div className={styles.toolbar}>
+        <div className={styles.searchWrap}>
+          <svg className={styles.searchIcon} viewBox="0 0 20 20" fill="none">
+            <circle cx="8.5" cy="8.5" r="5.5" stroke="currentColor" strokeWidth="1.5" />
+            <path d="M13 13l3.5 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
+          <input
+            className={styles.searchInput}
+            placeholder="Buscar por nombre, categoría..."
             value={globalFilter}
             onChange={e => setGlobalFilter(e.target.value)}
-            showClearIcon
-            onClear={() => setGlobalFilter('')}
-            className={styles.searchField}
           />
           {globalFilter && (
-            <p className={styles.filterInfo}>
-              {rowCount} resultado{rowCount !== 1 ? 's' : ''} para "{globalFilter}"
-            </p>
+            <button className={styles.clearBtn} onClick={() => setGlobalFilter('')}>
+              ✕
+            </button>
           )}
         </div>
+        {globalFilter && (
+          <p className={styles.filterInfo}>
+            {visibleRows.length} resultado{visibleRows.length !== 1 ? 's' : ''}
+          </p>
+        )}
+      </div>
 
-        {/* Table */}
-        <div className={styles.tableWrapper}>
-          {isLoading ? (
-            <div className={styles.stateBox}>Cargando productos...</div>
-          ) : rowCount === 0 ? (
-            <div className={styles.stateBox}>
-              {globalFilter
-                ? `Sin resultados para "${globalFilter}"`
-                : 'No hay productos registrados'}
-            </div>
-          ) : (
-            <table className={styles.table}>
-              <thead>
-                {table.getHeaderGroups().map(hg => (
-                  <tr key={hg.id} className={styles.thead}>
-                    {hg.headers.map(header => (
-                      <th key={header.id} className={styles.th}>
-                        {flexRender(header.column.columnDef.header, header.getContext())}
-                      </th>
+      {/* Table */}
+      <div className={styles.tableWrap}>
+        <table className={styles.table}>
+          <thead>
+            {table.getHeaderGroups().map(hg => (
+              <tr key={hg.id}>
+                {hg.headers.map(header => (
+                  <th key={header.id} className={styles.th}>
+                    {flexRender(header.column.columnDef.header, header.getContext())}
+                  </th>
+                ))}
+              </tr>
+            ))}
+          </thead>
+          <tbody>
+            {isLoading
+              ? Array.from({ length: SKELETON_ROWS }).map((_, i) => (
+                  <tr key={i} className={styles.tr}>
+                    {Array.from({ length: SKELETON_COLS }).map((_, j) => (
+                      <td key={j} className={styles.td}>
+                        <span className={styles.skeleton} style={{ width: `${50 + (j * 17 + i * 11) % 40}%`, height: 14 }} />
+                      </td>
                     ))}
                   </tr>
-                ))}
-              </thead>
-              <tbody>
-                {table.getRowModel().rows.map(row => (
-                  <tr key={row.id} className={styles.tr}>
+                ))
+              : visibleRows.length === 0
+              ? (
+                <tr>
+                  <td colSpan={SKELETON_COLS} className={styles.emptyCell}>
+                    {globalFilter
+                      ? `Sin resultados para "${globalFilter}"`
+                      : 'No hay productos registrados'}
+                  </td>
+                </tr>
+              )
+              : visibleRows.map((row, i) => (
+                  <tr
+                    key={row.id}
+                    className={styles.tr}
+                    style={{ animationDelay: `${i * 35}ms` }}
+                  >
                     {row.getVisibleCells().map(cell => (
                       <td key={cell.id} className={styles.td}>
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
                       </td>
                     ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
+                ))
+            }
+          </tbody>
+        </table>
       </div>
 
       {/* Create modal */}
@@ -231,6 +299,7 @@ const ProductsPage: React.FC = () => {
         onClose={handleClose}
         title="Nuevo producto"
         width="520px"
+        className="products-dark-modal"
         footerActions={[
           <BiaButton key="cancel" variant="outlined" onClick={handleClose} disabled={isCreating}>
             Cancelar
